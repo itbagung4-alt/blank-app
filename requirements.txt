@@ -2,3 +2,4 @@ streamlit
 pubchempy
 py3Dmol
 stmol
+ipython_genutils
