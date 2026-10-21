@@ -1,5 +1,7 @@
 streamlit
-pubchempy
-py3Dmol
-stmol
-ipython_genutils
+pandas
+numpy
+plotly
+matplotlib
+scipy
+openpyxl
