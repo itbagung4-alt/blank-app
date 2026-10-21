@@ -1,192 +1,292 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from scipy import stats
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import streamlit.components.v1 as components
+import math
 
-# Konfigurasi Halaman
+# Konfigurasi Halaman Web
 st.set_page_config(page_title="Penetapan Kadar Fosfat", layout="wide", page_icon="🧪")
 
-# Judul Aplikasi
-st.title("🧪 Penetapan Kadar Fosfat dalam Sampel Pupuk")
-st.markdown("Aplikasi interaktif untuk analisis kadar fosfat menggunakan metode Biru Molibdat (Spektrofotometri UV-Vis).")
+st.title("🧪 Aplikasi Penetapan Kadar Fosfat dalam Sampel Pupuk")
+st.markdown("**Metode Biru Molibdat - Spektrofotometri UV-Vis**")
 
 # Membuat Tab Navigasi
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🔍 Visual 3D UV-Vis", 
-    "📝 Cara Kerja & Preparasi", 
-    "📈 Kurva Kalibrasi & Kadar", 
-    "📊 Estimasi Ketidakpastian",
-    "📂 Data Excel"
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🔍 Visual 3D UV-Vis & Prinsip", 
+    "📝 Preparasi & Cara Kerja", 
+    "📈 Perhitungan & Kurva", 
+    "⚖️ Estimasi Ketidakpastian"
 ])
 
-# ================= TAB 1: VISUAL 3D =================
+# ================= TAB 1: VISUAL 3D & PRINSIP =================
 with tab1:
-    st.header("Visualisasi 3D Spektrofotometer UV-Vis")
-    st.markdown("""
-    Anda dapat melakukan **Zoom In/Out** (scroll mouse) dan **Rotasi 360°** (klik dan geser) pada model di bawah ini.
-    *(Catatan: Ini adalah model viewer bawaan web. Ganti URL `src` dengan link file `.glb` Shimadzu UV 1800 Anda di GitHub agar menampilkan alat aslinya).*
-    """)
+    st.header("Visualisasi 3D Spektrofotometer UV-Vis (Shimadzu UV-1800)")
+    st.info("💡 **Tips Interaktif:** Klik dan tahan untuk memutar alat, scroll untuk Zoom In/Out. Gunakan tombol untuk membuka kompartemen atau melihat bagian dalam alat (Tembus Pandang).")
     
-    # Menggunakan HTML tag <model-viewer> dari Google untuk render 3D
-    # Atribut material transparan (opacity) bisa diatur di model aslinya.
+    # KODE HTML/JS UNTUK THREE.JS 3D
     html_3d = """
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.1.1/model-viewer.min.js"></script>
-    <model-viewer 
-        src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/SciFiHelmet/glTF/SciFiHelmet.gltf" 
-        alt="3D model Spektrofotometer" 
-        camera-controls 
-        auto-rotate 
-        interaction-prompt="auto"
-        style="width: 100%; height: 500px; background-color: #e5e5f7; border-radius: 10px;">
-    </model-viewer>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+      body { margin: 0; overflow: hidden; background: #e9ecef; font-family: sans-serif;}
+      #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
+      button { padding: 8px 12px; cursor: pointer; margin: 4px; border: none; background: #0b5cad; color: white; border-radius: 4px; font-weight: bold;}
+      button:hover { background: #08427b; }
+    </style>
+    </head>
+    <body>
+    <div id="ui">
+      <div style="margin-bottom: 8px;"><b>Kontrol Instrumen</b></div>
+      <button onclick="toggleLid()">Buka/Tutup Kompartemen</button>
+      <button onclick="toggleXray()">Mode Tembus Pandang</button>
+    </div>
+    <script>
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 5, 10);
+
+      const renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 10, 5);
+      scene.add(light);
+      scene.add(new THREE.AmbientLight(0x606060));
+
+      const matCasing = new THREE.MeshStandardMaterial({color: 0xeeeeee, transparent: true, opacity: 1, roughness: 0.5});
+      const matScreen = new THREE.MeshStandardMaterial({color: 0x111111});
+      const matInside = new THREE.MeshStandardMaterial({color: 0x555555});
+      const matCuvette = new THREE.MeshStandardMaterial({color: 0x88ccff, transparent: true, opacity: 0.7});
+
+      const group = new THREE.Group();
+      scene.add(group);
+
+      // Body Utama (Casing UV-1800)
+      const bodyGeo = new THREE.BoxGeometry(6, 2, 4);
+      const body = new THREE.Mesh(bodyGeo, matCasing);
+      body.position.y = 1;
+      group.add(body);
+
+      // Layar/Keypad di kanan
+      const screen = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.6, 1.2), matScreen);
+      screen.position.set(1.5, 2.1, 0.5);
+      screen.rotation.x = -Math.PI / 16;
+      group.add(screen);
+
+      // Ruang sampel (kompartemen)
+      const compInside = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), matInside);
+      compInside.position.set(-1.5, 1.25, 0.5);
+      group.add(compInside);
+
+      // Dudukan Kuvet
+      const holder = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 1.2), new THREE.MeshStandardMaterial({color: 0x222222}));
+      holder.position.set(-1.5, 0.75, 0.5);
+      group.add(holder);
+
+      // Kuvet Blanko & Sampel
+      const cuvette1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), matCuvette);
+      cuvette1.position.set(-1.5, 1.2, 0.2);
+      group.add(cuvette1);
+      
+      const cuvette2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), matCuvette);
+      cuvette2.position.set(-1.5, 1.2, 0.8);
+      group.add(cuvette2);
+
+      // Berkas Cahaya UV-Vis (Terlihat saat tembus pandang)
+      const beamMat = new THREE.MeshBasicMaterial({color: 0xff00ff, transparent: true, opacity: 0.6});
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4), beamMat);
+      beam.rotation.z = Math.PI / 2;
+      beam.position.set(-1.5, 1.2, 0.5);
+      beam.visible = false;
+      group.add(beam);
+
+      // Tutup Kompartemen
+      const lidGroup = new THREE.Group();
+      lidGroup.position.set(-1.5, 2, -0.5);
+      group.add(lidGroup);
+      
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.15, 2.2), matCasing);
+      lid.position.set(0, 0, 1);
+      lidGroup.add(lid);
+
+      let lidOpen = false;
+      let targetRotation = 0;
+      window.toggleLid = function() {
+        lidOpen = !lidOpen;
+        targetRotation = lidOpen ? -Math.PI / 2.5 : 0;
+      }
+
+      let xrayOn = false;
+      window.toggleXray = function() {
+        xrayOn = !xrayOn;
+        matCasing.opacity = xrayOn ? 0.25 : 1.0;
+        matCasing.depthWrite = !xrayOn;
+        beam.visible = xrayOn;
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        lidGroup.rotation.x += (targetRotation - lidGroup.rotation.x) * 0.1;
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+    </body>
+    </html>
     """
-    st.components.v1.html(html_3d, height=520)
+    components.html(html_3d, height=450)
     
-    st.subheader("Prinsip Kerja Alat")
-    st.info("""
-    **Spektrofotometer Shimadzu UV-1800** bekerja berdasarkan hukum **Lambert-Beer**, di mana absorbansi cahaya monokromatis 
-    berbanding lurus dengan konsentrasi spesies penyerap (sampel). Pada analisis fosfat metode biru molibdat, ion ortofosfat 
-    bereaksi dengan amonium molibdat membentuk asam molibdofosfat yang kemudian direduksi menjadi kompleks berwarna biru. 
-    Intensitas warna biru ini diukur pada panjang gelombang spesifik (biasanya ~880 nm) menggunakan detektor UV-Vis.
+    st.subheader("Prinsip Kerja Alat (Metode Biru Molibdat)")
+    st.write("""
+    Fosfat bereaksi dengan amonium molibdat dalam suasana asam membentuk asam molibdofosfat. Kemudian direduksi dengan asam askorbat (atau pereduksi lain) menjadi kompleks biru molibdenum. 
+    Intensitas warna biru yang terbentuk sebanding dengan konsentrasi fosfat dan diukur absorbansinya menggunakan spektrofotometer UV-Vis pada panjang gelombang maksimum (biasanya sekitar 880 nm atau 890 nm).
     """)
 
-# ================= TAB 2: CARA KERJA =================
+# ================= TAB 2: PREPARASI & CARA KERJA =================
 with tab2:
-    st.header("Cara Kerja Penetapan Fosfat - Metode Biru Molibdat")
-    
-    st.markdown("### A. Pembuatan Larutan Kerja Fosfat (Deret Standar)")
+    st.header("Cara Kerja Penetapan Fosfat")
     st.markdown("""
+    **A. Pembuatan Larutan Kerja Fosfat (Deret Standar)**
     1. Siapkan 7 tabung ulir.
     2. Pipet larutan induk fosfat 2 mg/L masing-masing: 0 mL (blanko), 0,5 mL, 1,0 mL, 1,5 mL, 2,0 mL, 2,5 mL, 3.0 mL.
-    3. Tambahkan aquabides hingga tanda tera 10 mL.
-    4. Kocok hingga homogen.
-    5. Konsentrasi akhir jadi: 0; 0,1; 0,2; 0,3; 0,4; 0,5; 0,6 mg/L (ppm).
+    3. Tambahkan aquabides hingga tanda tera 10 mL dan kocok hingga homogen.
+    4. Konsentrasi akhir jadi: 0; 0,1; 0,2; 0,3; 0,4; 0,5; 0,6 mg/L (ppm).
+
+    **B. Preparasi Sampel Pupuk (Destruksi)**
+    1. Haluskan sampel pupuk, timbang 0,1 g masukkan ke beaker glass 100 mL.
+    2. Tambahkan 5 mL HNO3(p) lalu panaskan di hotplate 100°C hingga keruh.
+    3. Dinginkan, tambahkan 2 mL asam perklorat, lalu naikkan suhu ke 170°C hingga larutan bening.
+    4. Dinginkan, pindahkan ke labu takar 100 mL, encerkan dengan aquabides hingga tanda tera.
+    5. Pipet 0,5 mL larutan tersebut ke labu takar 100 mL lain, encerkan kembali. *(Faktor Pengenceran total)*
+
+    **C. Pengujian Presisi dan Akurasi (Air / Ekstrak)**
+    * **Presisi (Duplo):** Sampel diukur berulang untuk melihat kedekatan antar hasil pengukuran.
+    * **Akurasi (Spike):** Penambahan standar (spike) ke dalam sampel untuk mengevaluasi *Recovery* hasil.
     """)
 
-    st.markdown("### B. Preparasi Sampel Pupuk (Destruksi)")
-    st.markdown("""
-    1. Haluskan sampel pupuk, timbang 0,1 g masukkan ke beaker glass 100mL.
-    2. Tambahkan 5 mL HNO3(p).
-    3. Panaskan di atas hotplate suhu 100°C hingga larutan keruh.
-    4. Dinginkan, tambahkan 2 mL asam perklorat.
-    5. Naikkan suhu hotplate menjadi 170°C, panaskan hingga larutan bening.
-    6. Dinginkan, pindahkan ke labu takar 100 mL.
-    7. Encerkan dengan aquabides hingga tanda tera.
-    8. Pipet 0,5 mL larutan tersebut ke labu takar 100 mL lain, encerkan kembali.
-    """)
-
-    st.markdown("### C. Preparasi Sampel Akurasi (Spike)")
-    st.markdown("""
-    1. Timbang sampel pupuk 0,1 g.
-    2. Tambahkan 8 mL larutan baku fosfat 500 mg/L (ini spike-nya).
-    3. Lakukan destruksi sama seperti poin B dari awal sampai akhir.
-    """)
-
-    st.markdown("### D. Pengujian Sampel Air")
-    st.markdown("""
-    **1. Presisi Air (Duplo Ulir):**
-    * Pipet 10 mL sampel air yang sudah disaring dan diasamkan sampai pH 3 ke tabung ulir.
-    * Tambahkan 1,6 mL larutan prekasi kombinasi (campuran asam).
-    * Kocok hingga homogen, diamkan 10 menit hingga muncul warna biru.
-    * Baca di Spektrofotometer UV-Vis. Kerjakan duplo.
-    
-    **2. Akurasi Air (Spike):**
-    * Pipet 9 mL sampel air (sudah disaring, pH 3) ke tabung ulir.
-    * Tambahkan 1 mL standar fosfat 2 ppm.
-    * Tambahkan 1,6 mL larutan prekasi kombinasi.
-    * Kocok homogen, diamkan 10 menit hingga biru. Baca di UV-Vis.
-    
-    **3. Blanko:**
-    * Pipet 10 mL aquabides ke tabung ulir.
-    * Tambahkan 1,6 mL larutan prekasi kombinasi.
-    * Kocok homogen, diamkan 10 menit. Baca di UV-Vis sebagai blanko.
-    """)
-
-# ================= TAB 3: KURVA & KADAR =================
+# ================= TAB 3: PERHITUNGAN & KURVA =================
 with tab3:
-    st.header("Kurva Kalibrasi & Perhitungan Kadar")
-    st.markdown("Masukkan data absorbansi standar untuk membentuk persamaan garis lurus (y = bx + a).")
+    st.header("1. Input Data Deret Standar")
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([1, 2])
     with col1:
-        st.subheader("Data Deret Standar")
-        # Default data
-        df_standar = pd.DataFrame({
+        st.write("Masukkan Konsentrasi dan Absorbansi")
+        # Default data standar
+        default_data = pd.DataFrame({
             "Konsentrasi (mg/L)": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-            "Absorbansi": [0.000, 0.055, 0.112, 0.165, 0.221, 0.278, 0.330]
+            "Absorbansi": [0.002, 0.103, 0.196, 0.293, 0.384, 0.473, 0.570]
         })
-        edited_df = st.data_editor(df_standar, num_rows="dynamic", use_container_width=True)
+        edited_df = st.data_editor(default_data, num_rows="dynamic")
     
     with col2:
-        st.subheader("Grafik Kurva Kalibrasi")
-        x = edited_df["Konsentrasi (mg/L)"].values
+        x = edited_df["Konsentrasi (mg/L)"].values.reshape(-1, 1)
         y = edited_df["Absorbansi"].values
         
-        if len(x) > 1 and len(x) == len(y):
-            slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        if len(x) > 2:
+            model = LinearRegression()
+            model.fit(x, y)
+            r_sq = model.score(x, y)
+            intercept = model.intercept_
+            slope = model.coef_[0]
             
-            fig = px.scatter(edited_df, x="Konsentrasi (mg/L)", y="Absorbansi", title="Kurva Kalibrasi Fosfat")
-            fig.add_trace(go.Scatter(x=x, y=slope*x + intercept, mode='lines', name='Regresi Linear'))
-            st.plotly_chart(fig, use_container_width=True)
+            st.success(f"**Persamaan Regresi:** y = {slope:.4f}x + {intercept:.4f}")
+            st.success(f"**R² (Koefisien Determinasi):** {r_sq:.4f}")
             
-            st.success(f"**Persamaan Garis:** y = {slope:.4f}x + {intercept:.4f}")
-            st.success(f"**Linearitas (R²):** {r_value**2:.4f}")
+            # Plot Kurva
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.scatter(x, y, color='blue', label='Data Standar')
+            ax.plot(x, model.predict(x), color='red', linestyle='--', label='Regresi Linear')
+            ax.set_xlabel("Konsentrasi (mg/L)")
+            ax.set_ylabel("Absorbansi")
+            ax.set_title("Kurva Kalibrasi Fosfat")
+            ax.legend()
+            ax.grid(True)
+            st.pyplot(fig)
         else:
-            st.warning("Masukkan data yang valid untuk memunculkan kurva.")
+            st.warning("Masukkan minimal 3 data untuk membuat kurva regresi.")
 
     st.divider()
-    st.subheader("Kalkulator Kadar Sampel")
-    abs_sampel = st.number_input("Masukkan Absorbansi Sampel:", value=0.150, format="%.3f")
-    berat_sampel = st.number_input("Berat Sampel (g):", value=0.100, format="%.3f")
-    fp = st.number_input("Faktor Pengenceran (FP):", value=20000, help="Contoh: 100mL / 0.1g * 100mL / 0.5mL = 20000")
+    st.header("2. Perhitungan Kadar Sampel")
     
-    if st.button("Hitung Kadar Fosfat"):
-        c_sampel = (abs_sampel - intercept) / slope
-        kadar = (c_sampel * fp * 1e-3) # Konversi mg/L menyesuaikan unit
-        st.info(f"Konsentrasi sampel terukur (C): **{c_sampel:.4f} mg/L**")
-        st.success(f"Estimasi Kadar Fosfat dalam sampel: **{kadar:.2f} %** (atau sesuaikan dengan rumus SNI)")
+    c1, c2, c3 = st.columns(3)
+    abs_sampel = c1.number_input("Absorbansi Sampel", value=0.250, format="%.3f")
+    berat_sampel = c2.number_input("Berat Sampel (gram)", value=0.100, format="%.3f")
+    fp_sampel = c3.number_input("Faktor Pengenceran (FP)", value=2000) # 100/0.1 * 100/0.5
+    
+    if len(x) > 2:
+        kons_terukur = (abs_sampel - intercept) / slope
+        kadar_mgL = kons_terukur * fp_sampel
+        kadar_persen = (kadar_mgL * 0.1) / (berat_sampel * 1000) * 100 # Konversi unit
+        
+        st.info(f"""
+        **Hasil Kalkulasi:**
+        * Konsentrasi terukur di alat (x) = **{kons_terukur:.4f} mg/L**
+        * Kadar setelah dikalikan FP = **{kadar_mgL:.2f} mg/L**
+        """)
 
-# ================= TAB 4: KETIDAKPASTIAN =================
+# ================= TAB 4: ESTIMASI KETIDAKPASTIAN =================
 with tab4:
-    st.header("Estimasi Ketidakpastian Pengukuran")
-    st.markdown("Mengambil struktur perhitungan berdasarkan file `Blanko Ketidakpastian fosfat.xlsx`")
+    st.header("Estimasi Ketidakpastian (GUM Method)")
+    st.write("Isi spesifikasi alat gelas untuk menghitung penyumbang ketidakpastian baku.")
     
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Ishikawa_Fishbone_Diagram.svg/1024px-Ishikawa_Fishbone_Diagram.svg.png", 
-             caption="Diagram Tulang Ikan (Fishbone) Ketidakpastian (Contoh Representasi)", use_container_width=False, width=600)
-    
-    st.markdown("""
-    **Komponen Utama Ketidakpastian Fosfat:**
-    1. **Ketidakpastian Kurva Kalibrasi (U_kurva):** Berasal dari variasi regresi linear (slope, sum of squares).
-    2. **Ketidakpastian Penimbangan (U_massa):** Berasal dari spesifikasi neraca analitik, sertifikat kalibrasi, efek buoyansi.
-    3. **Ketidakpastian Volume (U_vol):** Dari labu takar (kalibrasi, efek suhu) dan pipet volumetrik.
-    4. **Ketidakpastian Presisi Metode (U_rep):** Dihitung dari simpangan baku (RSD) pengukuran duplo/pengulangan.
-    """)
-    
-    st.write("Silakan buka Tab 'Data Excel' untuk melihat detail isian sel dari file Excel ketidakpastian Anda.")
+    st.subheader("1. Ketidakpastian Kurva Kalibrasi ($u_{reg}$)")
+    if len(x) > 2:
+        # Perhitungan u_regresi analitik
+        y_pred = model.predict(x)
+        syx = np.sqrt(np.sum((y - y_pred)**2) / (len(x) - 2))
+        x_mean = np.mean(x)
+        Sxx = np.sum((x - x_mean)**2)
+        p = 1 # jumlah ulangan sampel
+        n = len(x)
+        u_reg = (syx / slope) * np.sqrt((1/p) + (1/n) + ((kons_terukur - x_mean)**2 / Sxx))
+        st.write(f"- Konsentrasi Sampel ($C_0$) = {kons_terukur:.4f} mg/L")
+        st.write(f"- Standar deviasi residual ($S_{{y/x}}$) = {syx:.4f}")
+        st.write(f"- Ketidakpastian Regresi ($u_{{reg}}$) = **{u_reg:.5f} mg/L**")
+    else:
+        st.warning("Kurva regresi belum terbentuk.")
 
-# ================= TAB 5: DATA EXCEL =================
-with tab5:
-    st.header("Integrasi Berkas Laporan Excel")
-    st.markdown("Di sini Anda dapat memuat file referensi **`Kelompok 1(A)_Kadar Fosfat(fix).xlsx`** dan **`Blanko Ketidakpastian fosfat.xlsx`** langsung ke dalam website.")
+    st.subheader("2. Ketidakpastian Alat Gelas ($u_{vol}$)")
+    c1, c2 = st.columns(2)
+    vol_labu = c1.number_input("Volume Labu Takar (mL)", value=100.0)
+    tol_labu = c1.number_input("Toleransi Labu Takar (± mL)", value=0.10)
+    vol_pipet = c2.number_input("Volume Pipet Volumetri (mL)", value=0.5)
+    tol_pipet = c2.number_input("Toleransi Pipet Volum (± mL)", value=0.005)
     
-    uploaded_kadar = st.file_uploader("Upload 'Kelompok 1(A)_Kadar Fosfat(fix).xlsx'", type=["xlsx", "xls"])
-    if uploaded_kadar is not None:
-        st.success("File Kadar Fosfat berhasil diunggah!")
-        try:
-            df_kadar = pd.read_excel(uploaded_kadar)
-            st.dataframe(df_kadar, use_container_width=True)
-        except Exception as e:
-            st.error(f"Gagal membaca file: {e}")
+    # Kalkulasi ketidakpastian baku alat gelas
+    u_kal_labu = tol_labu / math.sqrt(6) # Distribusi triangular
+    u_kal_pipet = tol_pipet / math.sqrt(6)
+    
+    st.write(f"- Ketidakpastian Labu Takar ($u_{{v\_labu}}$) = **{u_kal_labu:.5f} mL**")
+    st.write(f"- Ketidakpastian Pipet ($u_{{v\_pipet}}$) = **{u_kal_pipet:.5f} mL**")
+    
+    if len(x) > 2 and kons_terukur > 0:
+        st.subheader("3. Ketidakpastian Gabungan & Diperluas")
+        rel_reg = u_reg / kons_terukur
+        rel_labu = u_kal_labu / vol_labu
+        rel_pipet = u_kal_pipet / vol_pipet
+        
+        # Gabungan relatif
+        u_gab_rel = math.sqrt(rel_reg**2 + rel_labu**2 + rel_pipet**2)
+        u_gab = u_gab_rel * kadar_mgL
+        U_expand = u_gab * 2 # k=2 (95% confidence)
+        
+        st.success(f"**Ketidakpastian Baku Gabungan ($u_c$) = {u_gab:.3f} mg/L**")
+        st.error(f"**Hasil Akhir Pelaporan:** Kadar = {kadar_mgL:.2f} ± {U_expand:.2f} mg/L (k=2, 95% CI)")
 
-    st.divider()
-    
-    uploaded_ketidakpastian = st.file_uploader("Upload 'Blanko Ketidakpastian fosfat.xlsx'", type=["xlsx", "xls"])
-    if uploaded_ketidakpastian is not None:
-        st.success("File Ketidakpastian berhasil diunggah!")
-        try:
-            df_unc = pd.read_excel(uploaded_ketidakpastian)
-            st.dataframe(df_unc, use_container_width=True)
-        except Exception as e:
-            st.error(f"Gagal membaca file: {e}")
+st.caption("Aplikasi dikembangkan menggunakan Python, Streamlit, dan Three.js")
